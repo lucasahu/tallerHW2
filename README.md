@@ -19,10 +19,14 @@ Se deberá desarrollar en los mismos grupos del taller anterior.
 interrogación al grupo.
 # Estructura proyecto
 # Variables globales compartidas (cada función las llena o las lee)
+```bash
 PIDS=()        # PIDS[1]=1234 → mapeo secuencial→PID (opción 1 lo llena, opción 2 lo lee)
 SERVICIOS=()   # SERVICIOS[1]="cups.service" → secuencial→servicio (opción 3 llena, opción 4 lee)
+```
 # Funciones (cada una autocontenida):
+```bash
 listar_procesos()    # opción 1
 matar_proceso()      # opción 2
 listar_servicios()   # opción 3
 activar_servicio()   # opción 4
+```
