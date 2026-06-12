@@ -4,7 +4,34 @@ PIDS=()
 SERVICIOS=()
  
 listar_procesos() {
-    : # TODO Issue #2
+    read -p "Ingrese nombre de usuario (o * para todos): " usuario
+ 
+    # Elegir el comando ps según la entrada
+    if [ "$usuario" = "*" ]; then
+        salida=$(ps -e -o pid=,user=,comm=)
+    else
+        # Validar que el usuario exista antes de listar
+        if ! id "$usuario" &>/dev/null; then
+            echo "El usuario '$usuario' no existe."
+            return 1
+        fi
+        salida=$(ps -u "$usuario" -o pid=,user=,comm=)
+    fi
+ 
+    # Reiniciar el mapeo (un listado nuevo invalida el anterior)
+    PIDS=()
+    local listado=""
+    local contador=1
+ 
+    # Leer línea por línea SIN pipe para no perder PIDS en un subshell
+    while read -r pid user comm; do
+        PIDS[contador]=$pid
+        listado+="$contador) PID=$pid USER=$user CMD=$comm"$'\n'
+        contador=$((contador+1))
+    done <<< "$salida"
+ 
+    # Paginar el listado ya construido
+    echo "$listado" | less
 }
  
 matar_proceso() {
