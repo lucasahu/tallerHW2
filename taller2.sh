@@ -35,7 +35,26 @@ listar_procesos() {
 }
  
 matar_proceso() {
-    : # TODO Issue #3
+    # Sin listado previo no hay mapeo secuencial→PID
+    if [ ${#PIDS[@]} -eq 0 ]; then
+        echo "Primero debe listar procesos (opción 1)."
+        return 1
+    fi
+ 
+    read -p "Ingrese el número secuencial del proceso a matar: " num
+ 
+    # Validar que sea un número y que exista en el mapeo
+    if ! [[ "$num" =~ ^[0-9]+$ ]] || [ -z "${PIDS[$num]}" ]; then
+        echo "Número inválido."
+        return 1
+    fi
+ 
+    if kill "${PIDS[$num]}" 2>/dev/null; then
+        echo "Proceso ${PIDS[$num]} (n°$num) terminado con SIGTERM."
+    else
+        echo "No se pudo matar el proceso ${PIDS[$num]} (¿permisos? ¿ya no existe?)."
+        return 1
+    fi
 }
  
 listar_servicios() {
