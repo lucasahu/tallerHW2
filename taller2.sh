@@ -58,7 +58,29 @@ matar_proceso() {
 }
  
 listar_servicios() {
-    : # TODO Issue #4
+    if ! command -v systemctl &>/dev/null; then
+        echo "Este sistema no tiene systemctl."
+        return 1
+    fi
+
+    salida=$(systemctl list-units --all --type=service --state=inactive --no-legend --no-pager)
+
+    if [ -z "$salida" ]; then
+        echo "No hay servicios detenidos para mostrar."
+        return 1
+    fi
+
+    SERVICIOS=()
+    listado=""
+    contador=1
+
+    while read -r servicio carga activo sub descripcion; do
+        SERVICIOS[contador]=$servicio
+        listado+="$contador) SERVICIO=$servicio ESTADO=$activo/$sub DESCRIPCION=$descripcion"$'\n'
+        contador=$((contador+1))
+    done <<< "$salida"
+
+    echo "$listado" | less
 }
  
 activar_servicio() {
@@ -66,13 +88,36 @@ activar_servicio() {
 }
  
 while true; do
-    read -p "Opción [1-5]: " opcion
+    echo ""
+    echo "===== MENU PRINCIPAL ====="
+    echo "1) Listar procesos por usuario"
+    echo "2) Matar proceso por numero"
+    echo "3) Listar servicios que no estan corriendo"
+    echo "4) Activar servicio por numero"
+    echo "5) Salir"
+    echo ""
+
+    read -p "Ingrese una opcion [1-5]: " opcion
+
     case "$opcion" in
-        1) listar_procesos ;;
-        2) matar_proceso ;;
-        3) listar_servicios ;;
-        4) activar_servicio ;;
-        5) break ;;
-        *) ;;
+        1)
+            listar_procesos
+            ;;
+        2)
+            matar_proceso
+            ;;
+        3)
+            listar_servicios
+            ;;
+        4)
+            activar_servicio
+            ;;
+        5)
+            echo "Saliendo del script..."
+            break
+            ;;
+        *)
+            echo "Opcion invalida. Intente nuevamente."
+            ;;
     esac
 done
