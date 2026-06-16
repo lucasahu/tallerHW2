@@ -84,7 +84,25 @@ listar_servicios() {
 }
  
 activar_servicio() {
-    : # TODO Issue #5
+    if [ ${#SERVICIOS[@]} -eq 0 ]; then
+        echo "Primero debe listar servicios (opcion 3)."
+        return 1
+    fi
+
+    read -p "Ingrese el numero secuencial del servicio a activar: " num
+
+    if ! [[ "$num" =~ ^[0-9]+$ ]] || [ -z "${SERVICIOS[$num]}" ]; then
+        echo "Numero invalido."
+        return 1
+    fi
+
+    if systemctl start "${SERVICIOS[$num]}"; then
+        echo "Servicio ${SERVICIOS[$num]} activado correctamente."
+    else
+        echo "No se pudo activar el servicio ${SERVICIOS[$num]}."
+        echo "Puede que necesite ejecutar el script con sudo."
+        return 1
+    fi
 }
  
 while true; do
