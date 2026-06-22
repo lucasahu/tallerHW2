@@ -1,218 +1,334 @@
-# Explicación línea por línea — `taller2.sh`
+# Explicación de `taller2.sh`
+
+Este documento tiene dos partes:
+
+1. **Conceptos de Bash** usados en el script (qué hace `read`, `case`, `select`, `<<<`, etc.).
+2. **Recorrido bloque por bloque** del código real.
 
 ---
+
+# Parte 1 — Conceptos de Bash
+
+## El shebang `#!/bin/bash`
+La primera línea de un script. Le dice al sistema operativo con qué intérprete ejecutar el archivo. `#!/bin/bash` = "córrelo con bash". Sin esto, si ejecutas `./taller2.sh`, el sistema podría usar otro shell (como `sh`/`dash`) donde cosas como `select`, los arreglos o `<<<` **no funcionan**.
+
+## Variables y `$`
+- `nombre=valor` crea una variable (sin espacios alrededor del `=`).
+- `$nombre` o `${nombre}` lee su valor.
+- Se usan comillas (`"$nombre"`) para evitar problemas si el valor tiene espacios o está vacío.
+
+## `read`
+Lee lo que el usuario escribe por teclado y lo guarda en una variable.
+- `read -p "texto" var` → muestra "texto" como pregunta (`-p` = *prompt*) y guarda la respuesta en `var`.
+- `read -r a b c` → lee una línea y la parte por espacios: la 1ª palabra a `a`, la 2ª a `b`, **el resto** a `c`. El `-r` evita que bash interprete las contrabarras `\`.
+
+## Arreglos (arrays)
+- `PIDS=()` crea un arreglo vacío (una lista).
+- `PIDS[3]=8801` guarda un valor en la posición 3.
+- `${PIDS[3]}` lee la posición 3.
+- `${#PIDS[@]}` da la **cantidad** de elementos (el `#` significa "largo de").
+
+## `if` y los corchetes `[ ]`
+`[ ... ]` es una prueba (test) que da verdadero/falso. **Los espacios internos son obligatorios.** Operadores usados:
+- `[ "$a" = "$b" ]` → ¿son iguales como texto?
+- `[ -z "$a" ]` → ¿está vacío? (*zero length*).
+- `[ "$n" -eq 0 ]` → ¿son iguales como número? (`-eq` = *equals*).
+- `!` adelante invierte el resultado: `if ! comando` = "si el comando FALLÓ".
+
+## Códigos de salida (`return` / `$?`)
+En Linux todo comando devuelve un número: **0 = éxito, distinto de 0 = error**. Por eso podemos hacer `if comando; then ...` (entra si el comando tuvo éxito). `return 1` sale de una función con código de error.
+
+## `case ... esac`
+Es el `switch` de bash. Compara un valor contra varios patrones:
+```bash
+case "$x" in
+    patron1) ordenes ;;
+    patron2) ordenes ;;
+    *)       ordenes ;;   # comodín: calza con todo
+esac
+```
+- `;;` marca el fin de cada caso.
+- `esac` es "case" escrito al revés y cierra el bloque.
+- Los patrones usan comodines de archivo (globs), no expresiones regulares. Por ejemplo `*[!0-9]*` significa "cualquier texto que contenga **al menos un carácter que NO sea dígito**", y `""` calza con la entrada vacía. Juntos sirven para detectar que algo **no** es un número.
+
+## `while ... done`
+Repite un bloque mientras se cumpla una condición. En este script se usa para leer texto **línea por línea**:
+```bash
+while read -r ...; do
+    ...
+done <<< "$texto"
+```
+
+## Sustitución de comandos `$( )`
+`var=$(comando)` ejecuta el comando y guarda **su salida (lo que imprimiría)** como texto en `var`.
+
+## Here-string `<<<`
+`comando <<< "$texto"` le entrega el contenido de `$texto` al comando como **entrada estándar (stdin)**, igual que si viniera de un archivo, pero sin crear ningún archivo. Lo usamos para alimentar el `while read` con el texto que capturamos antes.
+
+### ¿Por qué `<<<` y no un pipe `|`?
+Pregunta clásica de interrogación. Si hiciéramos `comando | while read ...`, bash ejecuta el `while` en un **subshell** (un proceso hijo aparte). El arreglo se llenaría dentro de ese hijo y, al terminar el pipe, el hijo muere y **se lleva el arreglo**: quedaría vacío en el script principal. Con `<<<` el loop corre en el **mismo** proceso, así que el arreglo sobrevive y la opción de matar/activar puede usarlo.
+
+## Aritmética `$(( ))`
+Para hacer cuentas: `contador=$((contador+1))`. Fuera de `$(( ))`, bash trataría `contador+1` como texto, no como suma.
+
+## Redirección `>/dev/null 2>&1`
+- `>` manda la salida normal de un comando a un archivo. `/dev/null` es un "agujero negro" que descarta todo.
+- `2>&1` manda también los errores (canal 2) al mismo lugar.
+- Resultado: ejecutamos el comando en silencio porque solo nos importa **si tuvo éxito o no**, no lo que imprime.
+
+## `select` y `PS3` (el menú)
+`select` construye automáticamente un **menú numerado** a partir de una lista y repite hasta que se le indique salir:
+```bash
+PS3="Elija una opción: "
+select opc in "${opciones[@]}"; do
+    case $opc in
+        ...
+    esac
+done
+```
+- `select` imprime cada elemento de la lista con un número delante.
+- `PS3` es el texto que `select` muestra como pregunta.
+- Lo que el usuario elige queda en `opc` (el texto de la opción); el número que tecleó queda en `$REPLY`.
+- Se repite en loop hasta encontrar un `break`.
+
+## Comandos del sistema usados
+- `ps` → lista los procesos. `-e` = todos; `-u usuario` = los de un usuario; `-o pid=,user=,comm=` = mostrar solo esas columnas, y el `=` tras cada una **borra el encabezado** (la línea de títulos).
+- `id usuario` → da información de un usuario; **falla** si el usuario no existe (lo aprovechamos para validar).
+- `kill PID` → manda la señal SIGTERM (terminación ordenada) a un proceso. `kill -9` sería SIGKILL (muerte inmediata).
+- `which comando` → indica si un comando está instalado.
+- `systemctl` → administra servicios:
+  - `list-unit-files --type=service` → lista **todos los servicios instalados**.
+  - `is-active servicio` → dice si está corriendo (éxito) o no (error).
+  - `start servicio` → lo arranca.
+- `less` → **paginador**: muestra texto página por página (espacio/flechas para avanzar, `q` para salir).
+- `--no-legend` y `--no-pager` → le piden a `systemctl` que no imprima encabezados ni use su propio paginador.
+
+---
+
+# Parte 2 — Recorrido bloque por bloque
 
 ## Cabecera
 
 ```bash
 #!/bin/bash
-```
-Se llama *shebang*. Le dice al sistema operativo: "este archivo de texto ejecútalo con el programa `/bin/bash`". Sin esta línea, el sistema no sabe qué intérprete usar. Es como decir "este archivo es Python" o "este archivo es Java", pero para shell.
 
-```bash
 PIDS=()
 SERVICIOS=()
 ```
-Crea dos **arrays vacíos**. En bash, `()` es un array (lista). Son **globales**: cualquier función puede leerlos y escribirlos. Son el "puente" entre opciones:
-
-- La opción 1 llena `PIDS` → la opción 2 lo lee.
-- La opción 3 llenará `SERVICIOS` → la opción 4 lo leerá.
-
-En bash los arrays se acceden así: `${PIDS[3]}` = "el elemento en la posición 3".
+Shebang + dos arreglos vacíos **globales**. Son el "puente" entre opciones:
+- La opción 1 llena `PIDS` → la opción 2 lo lee para saber qué proceso matar.
+- La opción 3 llena `SERVICIOS` → la opción 4 lo lee para saber qué servicio activar.
 
 ---
 
-## Función `listar_procesos` (opción 1)
+## `listar_procesos` (opción 1)
 
 ```bash
-listar_procesos() {
+read -p "Ingrese nombre de usuario (o * para todos): " usuario
 ```
-Define una función. Igual que en cualquier lenguaje, pero sin parámetros declarados (en bash los parámetros llegan de otra forma, acá no usamos).
+Pide el usuario y lo guarda en `usuario`.
 
 ```bash
-    read -p "Ingrese nombre de usuario (o * para todos): " usuario
+if [ "$usuario" = "*" ]; then
+    salida=$(ps -e -o pid=,user=,comm=)
 ```
-`read` pausa el programa y espera que el usuario escriba algo y presione Enter. Lo que escribió queda guardado en la variable `usuario`. El `-p "texto"` muestra ese texto como pregunta antes de esperar (p = *prompt*).
+Si escribió `*`, captura **todos** los procesos. El `-o pid=,user=,comm=` muestra solo PID, usuario y comando, sin encabezado.
 
 ```bash
-    if [ "$usuario" = "*" ]; then
+else
+    if ! id "$usuario" >/dev/null 2>&1; then
+        echo "El usuario '$usuario' no existe."
+        return 1
+    fi
+    salida=$(ps -u "$usuario" -o pid=,user=,comm=)
+fi
 ```
-Un if. En bash las comparaciones van entre corchetes `[ ]` **con espacios obligatorios** alrededor. `$usuario` es "el valor de la variable usuario". Las comillas alrededor (`"$usuario"`) evitan errores si el valor tiene espacios o está vacío. Aquí pregunta: ¿escribió un asterisco?
+Si no escribió `*`, primero **valida** que el usuario exista: `id usuario` falla si no existe, y `! ... ` detecta esa falla; en ese caso avisa y vuelve al menú. Si existe, captura solo los procesos de ese usuario con `-u`.
 
 ```bash
-        salida=$(ps -e -o pid=,user=,comm=)
+PIDS=()
+listado=""
+contador=1
 ```
-La parte más densa. De adentro hacia afuera:
-
-- `ps` = comando que lista los **procesos** corriendo en el sistema.
-- `-e` = *everyone*, todos los procesos del sistema.
-- `-o pid=,user=,comm=` = "muéstrame solo 3 columnas: PID, usuario y nombre del comando". El signo `=` después de cada columna **borra el encabezado** (la línea "PID USER COMMAND" que normalmente sale arriba). Lo necesitamos porque si no, esa línea de título se enumeraría como si fuera el proceso n°1.
-- `$( ... )` = "ejecuta este comando y **devuélveme su salida como texto**". Es como capturar lo que el comando habría impreso en pantalla.
-- `salida=` = guarda todo ese texto en la variable `salida`.
-
-Resultado: `salida` contiene algo como:
-```
-      1 root     systemd
-    523 lucas    firefox
-    611 lucas    bash
-```
+Reinicia el arreglo (cada listado nuevo invalida el anterior), prepara el texto a mostrar y el número secuencial que empieza en 1.
 
 ```bash
-    else
-        if ! id "$usuario" &>/dev/null; then
+while read -r pid user comm; do
+    PIDS[contador]=$pid
+    listado+="$contador) PID=$pid USER=$user CMD=$comm"$'\n'
+    contador=$((contador+1))
+done <<< "$salida"
 ```
-Si NO escribió `*`, primero validamos que el usuario exista. `id usuario` es un comando que da información de un usuario, y **falla** (devuelve error) si el usuario no existe — usamos ese efecto secundario como validación. El `!` invierte: "si id FALLÓ...". El `&>/dev/null` tira toda la salida del comando a la basura (`/dev/null` es un agujero negro): solo nos interesa si funcionó o no, no lo que imprime.
+Recorre la salida de `ps` **línea por línea** (alimentada con `<<<`). En cada línea:
+- `PIDS[contador]=$pid` → **la línea clave**: guarda el PID real en la posición secuencial. Si el n°3 del listado es el PID 8801, queda `PIDS[3]=8801`. Así el usuario usa números y nosotros sabemos el PID.
+- Arma la línea visible (ej. `3) PID=8801 USER=lucas CMD=firefox`) y la agrega a `listado` (`$'\n'` es un salto de línea).
+- Sube el contador.
 
 ```bash
-            echo "El usuario '$usuario' no existe."
-            return 1
+echo "$listado" | less
 ```
-`echo` imprime en pantalla. `return 1` sale de la función con código de error (en bash/Linux, **0 = éxito, cualquier otro número = error**). Volvemos al menú.
+Con el arreglo ya lleno y el texto armado, lo muestra página a página con `less`. Aquí el pipe no causa problema porque ya no estamos llenando ningún arreglo.
+
+---
+
+## `matar_proceso` (opción 2)
 
 ```bash
-        salida=$(ps -u "$usuario" -o pid=,user=,comm=)
+if [ ${#PIDS[@]} -eq 0 ]; then
+    echo "Primero debe listar procesos (opción 1)."
+    return 1
+fi
 ```
-Igual que antes pero con `-u "$usuario"` = "solo los procesos de ESTE usuario".
+Si el arreglo está vacío, es que nunca se corrió la opción 1: no hay mapeo número→PID, así que avisa y vuelve.
 
 ```bash
-    PIDS=()
+read -p "Ingrese el número secuencial del proceso a matar: " num
+
+case "$num" in
+    *[!0-9]*|"")
+        echo "Número inválido."
+        return 1
+        ;;
+esac
 ```
-Vacía el array antes de llenarlo. Importante: si ya habías listado antes, el mapeo viejo queda obsoleto (esos números apuntaban a otro listado). Cada listado nuevo parte de cero.
+Pide el número y valida que sea realmente un número: `*[!0-9]*` calza si contiene algún carácter no-dígito, y `""` calza si está vacío. En cualquiera de esos casos, error.
 
 ```bash
-    local listado=""
-    local contador=1
+if [ -z "${PIDS[$num]}" ]; then
+    echo "Número inválido."
+    return 1
+fi
 ```
-Dos variables. `local` = solo existen dentro de esta función (buena práctica, igual que en otros lenguajes). `listado` acumulará el texto a mostrar; `contador` es el número secuencial que empieza en 1.
+Segunda validación: si el número está fuera de rango (ej. pidió el 99 pero solo había 20), esa posición del arreglo está vacía → inválido.
 
 ```bash
-    while read -r linea...   # en el código: while read -r pid user comm; do
+if kill "${PIDS[$num]}" 2>/dev/null; then
+    echo "Proceso ${PIDS[$num]} (n°$num) terminado con SIGTERM."
+else
+    echo "No se pudo matar el proceso ${PIDS[$num]} (¿permisos? ¿ya no existe?)."
+    return 1
+fi
 ```
-Aquí está el truco central. `read -r pid user comm` lee **una línea** y la parte por espacios: la primera palabra va a `pid`, la segunda a `user`, y el resto a `comm`. Como cada línea de `ps` es `PID USUARIO COMANDO`, cada variable recibe su pedazo. El `-r` evita que bash interprete los `\` raros (siempre se pone, por seguridad).
+`${PIDS[$num]}` traduce el número secuencial al PID real y le manda SIGTERM con `kill`. El `2>/dev/null` oculta los errores feos de kill (los manejamos nosotros). Si kill tuvo éxito, confirma; si no (sin permisos, o el proceso ya murió), avisa.
 
-El `while ... done` repite esto línea por línea hasta que se acaben.
+---
+
+## `listar_servicios` (opción 3)
 
 ```bash
-        PIDS[contador]=$pid
+if ! which systemctl >/dev/null 2>&1; then
+    echo "Este sistema no tiene systemctl."
+    return 1
+fi
 ```
-**La línea más importante del taller.** Guarda el PID real en la posición `contador` del array. Ejemplo: si la línea 3 del listado es el proceso 8801, entonces `PIDS[3]=8801`. Así, cuando el usuario después diga "mata el n°3", sabremos que se refiere al PID 8801. Esto cumple la restricción del enunciado: el usuario usa números secuenciales, nunca PIDs.
+Verifica que el sistema use `systemctl` antes de seguir.
 
 ```bash
-        listado+="$contador) PID=$pid USER=$user CMD=$comm"$'\n'
+salida=$(systemctl list-unit-files --type=service --no-legend --no-pager)
 ```
-`+=` agrega texto al final de `listado` (concatenación). Construimos la línea visible: `3) PID=8801 USER=lucas CMD=firefox`. El `$'\n'` es un salto de línea explícito.
+Captura **todos los servicios instalados** en el sistema (esto cumple el "todos los instalados" del enunciado).
 
 ```bash
+SERVICIOS=()
+listado=""
+contador=1
+
+while read -r servicio estado resto; do
+    if ! systemctl is-active "$servicio" >/dev/null 2>&1; then
+        SERVICIOS[contador]=$servicio
+        listado+="$contador) SERVICIO=$servicio ESTADO=$estado"$'\n'
         contador=$((contador+1))
+    fi
+done <<< "$salida"
 ```
-Suma 1. En bash, la aritmética va dentro de `$(( ))` — fuera de eso, bash trataría `contador+1` como texto literal.
+Recorre cada servicio instalado. `is-active` dice si está corriendo; con `!` nos quedamos solo con los que **NO** están corriendo. A esos los enumera y los guarda en `SERVICIOS[contador]` (mismo truco que con los PIDs: número secuencial → nombre del servicio).
 
 ```bash
-    done <<< "$salida"
-```
-Cierra el loop e indica **de dónde** lee el `read`: del contenido de la variable `salida` (el texto de `ps` que capturamos antes). El operador `<<<` se llama *here-string*.
+if [ ${#SERVICIOS[@]} -eq 0 ]; then
+    echo "No hay servicios detenidos para mostrar."
+    return 1
+fi
 
-**¿Por qué no simplemente `ps ... | while read ...`?** Pregunta de interrogación segura. Con un pipe (`|`), bash ejecuta el `while` en un **subshell**: un proceso hijo separado. El array `PIDS` se llenaría en ese hijo, y al terminar el pipe, el hijo muere y se lleva el array a la tumba — `PIDS` quedaría vacío en el script principal y la opción 2 jamás funcionaría. Con `<<<`, el loop corre en el mismo proceso y el array sobrevive.
-
-```bash
-    echo "$listado" | less
+echo "$listado" | less
 ```
-Recién ahora, con el array ya lleno y el texto ya construido, mandamos el listado a `less`, que es el **paginador**: muestra página por página (flechas/espacio para avanzar, `q` para salir). Aquí el pipe no causa problema porque ya no estamos llenando ningún array.
+Si no quedó ninguno, avisa. Si hay, los muestra paginados con `less`.
 
 ---
 
-## Función `matar_proceso` (opción 2)
+## `activar_servicio` (opción 4)
 
 ```bash
-    if [ ${#PIDS[@]} -eq 0 ]; then
-```
-`${#PIDS[@]}` = "cantidad de elementos del array PIDS" (el `#` significa "largo de"). `-eq` = *equals* para números. Traducción: "si el array está vacío...". Está vacío cuando el usuario nunca corrió la opción 1 — no hay listado, no hay mapeo, no se puede matar nada por número.
+if [ ${#SERVICIOS[@]} -eq 0 ]; then
+    echo "Primero debe listar servicios (opcion 3)."
+    return 1
+fi
 
-```bash
-        echo "Primero debe listar procesos (opción 1)."
+read -p "Ingrese el numero secuencial del servicio a activar: " num
+
+case "$num" in
+    *[!0-9]*|"")
+        echo "Numero invalido."
         return 1
+        ;;
+esac
+
+if [ -z "${SERVICIOS[$num]}" ]; then
+    echo "Numero invalido."
+    return 1
+fi
 ```
-Avisa y vuelve al menú sin romper nada.
+Misma estructura que `matar_proceso`: exige que primero se haya listado (opción 3), pide el número secuencial y lo valida (que sea número y que exista en el arreglo).
 
 ```bash
-    read -p "Ingrese el número secuencial del proceso a matar: " num
+if systemctl start "${SERVICIOS[$num]}"; then
+    echo "Servicio ${SERVICIOS[$num]} activado correctamente."
+else
+    echo "No se pudo activar el servicio ${SERVICIOS[$num]}."
+    echo "Puede que necesite ejecutar el script con sudo."
+    return 1
+fi
 ```
-Pide el número (el secuencial del listado, NO el PID — restricción del enunciado).
-
-```bash
-    if ! [[ "$num" =~ ^[0-9]+$ ]] || [ -z "${PIDS[$num]}" ]; then
-```
-Doble validación unida por `||` (OR). Falla si cualquiera de las dos falla:
-
-1. `[[ "$num" =~ ^[0-9]+$ ]]` — compara contra una **expresión regular**: `^[0-9]+$` = "de principio (`^`) a fin (`$`), solo dígitos (`[0-9]`), al menos uno (`+`)". Si el usuario escribió "hola" o "-5", esto falla. El `!` lo invierte: "si NO es un número...".
-2. `[ -z "${PIDS[$num]}" ]` — `-z` = *zero length*, "¿está vacío?". Si escribió 99 pero el listado tenía 20 procesos, `PIDS[99]` no existe (vacío) → número inválido.
-
-```bash
-    if kill "${PIDS[$num]}" 2>/dev/null; then
-```
-La acción. `${PIDS[$num]}` traduce el número secuencial al PID real (si escribió 3, esto es 8801). `kill PID` le manda la señal **SIGTERM** al proceso: "por favor, termina ordenadamente". El `2>/dev/null` descarta los mensajes de error feos de kill (los manejamos nosotros con mensajes propios). El `if kill ...` aprovecha que kill devuelve éxito/error: si funcionó entra al `then`.
-
-> **Dato de interrogación:** `kill` a secas manda SIGTERM (señal 15, terminación amable que el proceso puede atrapar para limpiar antes de morir). `kill -9` manda SIGKILL (señal 9, muerte inmediata e inevitable, el proceso ni se entera). Buena práctica: SIGTERM primero, SIGKILL solo si el proceso no coopera.
-
-```bash
-        echo "Proceso ${PIDS[$num]} (n°$num) terminado con SIGTERM."
-    else
-        echo "No se pudo matar el proceso ${PIDS[$num]} (¿permisos? ¿ya no existe?)."
-        return 1
-```
-Feedback en ambos casos. El kill puede fallar si el proceso es de otro usuario (sin permisos) o si murió entre el listado y ahora.
+`${SERVICIOS[$num]}` traduce el número al nombre del servicio y lo arranca con `systemctl start`. Si falla (normalmente por permisos), sugiere usar `sudo`.
 
 ---
 
 ## Menú principal
 
 ```bash
-while true; do
+PS3=" PS3 Este es el prompt automático del menú de opciones "
+
+opciones=("Listar procesos por usuario" "Matar proceso por numero" "Listar servicios que no estan corriendo" "Activar servicio por numero" "Salir")
 ```
-Loop infinito: el menú se repite eternamente hasta que algo lo rompa (`break`).
+`PS3` es el texto que mostrará `select`. `opciones` es la lista que se convertirá en menú numerado.
 
 ```bash
-    read -p "Opción [1-5]: " opcion
-```
-Pide la opción al usuario.
-
-```bash
-    case "$opcion" in
-```
-Un `switch` de toda la vida, con sintaxis marciana de bash.
-
-```bash
-        1) listar_procesos ;;
-        2) matar_proceso ;;
-        3) listar_servicios ;;
-        4) activar_servicio ;;
-```
-Cada caso llama a su función. El `;;` es el `break` del switch (fin del caso). Las funciones se llaman solo con su nombre, sin paréntesis.
-
-```bash
-        5) break ;;
-```
-`break` rompe el `while true` → el script sigue después del `done` → como no hay nada más, termina. Esa es la opción "Salir".
-
-```bash
-        *) ;;
-```
-El `default` del switch: cualquier cosa que no sea 1-5 cae aquí. Por ahora no hace nada (vuelve a mostrar el menú). Importante que vaya **al final**: `case` evalúa en orden y `*` calza con todo — si fuera primero, se tragaría todas las opciones.
-
-```bash
-    esac
+select opc in "${opciones[@]}"
+do
+   case $opc in
+    "Listar procesos por usuario")  listar_procesos ;;
+    "Matar proceso por numero")     matar_proceso ;;
+    "Listar servicios que no estan corriendo") listar_servicios ;;
+    "Activar servicio por numero")  activar_servicio ;;
+    "Salir")
+        echo "Finalizamos el menú con un break"
+        break
+        ;;
+    *)
+        echo "opción incorrecta"
+        ;;
+   esac
 done
 ```
-`esac` cierra el `case` (es "case" al revés, en serio). `done` cierra el `while`.
+`select` imprime el menú numerado y espera la elección. El texto elegido queda en `opc`, y el `case` decide qué función llamar. La opción "Salir" hace `break`, que rompe el loop de `select` y termina el script. El comodín `*` atrapa cualquier número fuera de rango y vuelve a mostrar el menú.
 
 ---
 
-## Resumen mental del flujo completo
+## Resumen del flujo
 
-1. El script define los arrays vacíos y las funciones (definir ≠ ejecutar: todavía no pasa nada).
-2. Entra al `while true` y muestra el menú.
-3. Usuario elige **1** → `listar_procesos` pide un usuario, captura la salida de `ps`, recorre línea por línea **enumerando y llenando `PIDS` al mismo tiempo**, y al final pagina con `less`.
-4. Usuario elige **2** → `matar_proceso` valida que haya listado, pide el número, lo **traduce a PID con el array**, y manda SIGTERM.
-5. Opciones 3 y 4 harán lo mismo pero con servicios y `systemctl` (pendientes).
-6. Opción 5 → `break` → fin.
-
+1. Se definen los arreglos vacíos y las funciones (definir ≠ ejecutar).
+2. `select` muestra el menú y espera una opción.
+3. Opción **1** → `listar_procesos`: valida usuario/`*`, captura `ps`, enumera y llena `PIDS` a la vez, y pagina con `less`.
+4. Opción **2** → `matar_proceso`: valida, traduce número→PID con el arreglo y manda SIGTERM.
+5. Opción **3** → `listar_servicios`: lista todos los servicios instalados, filtra los que no corren con `is-active`, los enumera y llena `SERVICIOS`.
+6. Opción **4** → `activar_servicio`: valida, traduce número→nombre y hace `systemctl start`.
+7. Opción **5** → `break` → fin.
