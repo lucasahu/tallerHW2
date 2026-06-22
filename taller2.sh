@@ -7,34 +7,27 @@ listar_procesos() {
     read -p "Ingrese nombre de usuario (o * para todos): " usuario
 
     if [ "$usuario" = "*" ]; then
-        ps -e -o pid,user,comm > procesos.txt
+        salida=$(ps -e -o pid=,user=,comm=)
     else
         if ! id "$usuario" >/dev/null 2>&1; then
             echo "El usuario '$usuario' no existe."
             return 1
         fi
-        ps -u "$usuario" -o pid,user,comm > procesos.txt
+        salida=$(ps -u "$usuario" -o pid=,user=,comm=)
     fi
 
     PIDS=()
+    listado=""
     contador=1
-    primera=1
-    > listado.txt
 
     while read -r pid user comm; do
-        # La primera linea es la cabecera (PID USER COMMAND), la saltamos
-        if [ $primera -eq 1 ]; then
-            primera=0
-            continue
-        fi
         PIDS[contador]=$pid
-        echo "$contador) PID=$pid USER=$user CMD=$comm" >> listado.txt
+        listado+="$contador) PID=$pid USER=$user CMD=$comm"$'\n'
         contador=$((contador+1))
-    done < procesos.txt
+    done <<< "$salida"
 
     # Mostramos el listado pagina a pagina
-    less listado.txt
-    rm -f procesos.txt listado.txt
+    echo "$listado" | less
 }
 
 matar_proceso() {
@@ -72,30 +65,28 @@ listar_servicios() {
     fi
 
     # Listamos todos los servicios instalados en el sistema
-    systemctl list-unit-files --type=service --no-legend --no-pager > unidades.txt
+    salida=$(systemctl list-unit-files --type=service --no-legend --no-pager)
 
     SERVICIOS=()
+    listado=""
     contador=1
-    > listado.txt
 
     # Recorremos cada servicio instalado y dejamos solo los que NO estan corriendo
     while read -r servicio estado resto; do
         if ! systemctl is-active "$servicio" >/dev/null 2>&1; then
             SERVICIOS[contador]=$servicio
-            echo "$contador) SERVICIO=$servicio ESTADO=$estado" >> listado.txt
+            listado+="$contador) SERVICIO=$servicio ESTADO=$estado"$'\n'
             contador=$((contador+1))
         fi
-    done < unidades.txt
+    done <<< "$salida"
 
-    if [ $contador -eq 1 ]; then
+    if [ ${#SERVICIOS[@]} -eq 0 ]; then
         echo "No hay servicios detenidos para mostrar."
-        rm -f unidades.txt listado.txt
         return 1
     fi
 
     # Mostramos el listado pagina a pagina
-    less listado.txt
-    rm -f unidades.txt listado.txt
+    echo "$listado" | less
 }
 
 activar_servicio() {
