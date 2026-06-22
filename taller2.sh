@@ -71,24 +71,31 @@ listar_servicios() {
         return 1
     fi
 
-    salida=$(systemctl list-units --all --type=service --state=inactive,failed --no-legend --no-pager)
+    # Listamos todos los servicios instalados en el sistema
+    systemctl list-unit-files --type=service --no-legend --no-pager > unidades.txt
 
-    if [ -z "$salida" ]; then
+    SERVICIOS=()
+    contador=1
+    > listado.txt
+
+    # Recorremos cada servicio instalado y dejamos solo los que NO estan corriendo
+    while read -r servicio estado resto; do
+        if ! systemctl is-active "$servicio" >/dev/null 2>&1; then
+            SERVICIOS[contador]=$servicio
+            echo "$contador) SERVICIO=$servicio ESTADO=$estado" >> listado.txt
+            contador=$((contador+1))
+        fi
+    done < unidades.txt
+
+    if [ $contador -eq 1 ]; then
         echo "No hay servicios detenidos para mostrar."
+        rm -f unidades.txt listado.txt
         return 1
     fi
 
-    SERVICIOS=()
-    listado=""
-    contador=1
-
-    while read -r servicio carga activo sub descripcion; do
-        SERVICIOS[contador]=$servicio
-        listado+="$contador) SERVICIO=$servicio ESTADO=$activo/$sub DESCRIPCION=$descripcion"$'\n'
-        contador=$((contador+1))
-    done <<< "$salida"
-
-    echo "$listado" | less
+    # Mostramos el listado pagina a pagina
+    less listado.txt
+    rm -f unidades.txt listado.txt
 }
 
 activar_servicio() {
