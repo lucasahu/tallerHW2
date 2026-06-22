@@ -26,27 +26,27 @@ listar_procesos() {
         contador=$((contador+1))
     done <<< "$salida"
 
-    # Mostramos el listado pagina a pagina
+    
     echo "$listado" | less
 }
 
 matar_proceso() {
     if [ ${#PIDS[@]} -eq 0 ]; then
-        echo "Primero debe listar procesos (opción 1)."
+        echo "Primero debe listar procesos (opcion 1)."
         return 1
     fi
 
-    read -p "Ingrese el número secuencial del proceso a matar: " num
+    read -p "Ingrese el numero secuencial del proceso a matar: " num
 
     case "$num" in
         *[!0-9]*|"")
-            echo "Número inválido."
+            echo "Numero invalido."
             return 1
             ;;
     esac
 
     if [ -z "${PIDS[$num]}" ]; then
-        echo "Número inválido."
+        echo "Numero invalido."
         return 1
     fi
 
@@ -64,14 +64,12 @@ listar_servicios() {
         return 1
     fi
 
-    # Listamos todos los servicios instalados en el sistema
     salida=$(systemctl list-unit-files --type=service --no-legend --no-pager)
 
     SERVICIOS=()
     listado=""
     contador=1
 
-    # Recorremos cada servicio instalado y dejamos solo los que NO estan corriendo
     while read -r servicio estado resto; do
         if ! systemctl is-active "$servicio" >/dev/null 2>&1; then
             SERVICIOS[contador]=$servicio
@@ -85,7 +83,6 @@ listar_servicios() {
         return 1
     fi
 
-    # Mostramos el listado pagina a pagina
     echo "$listado" | less
 }
 
@@ -118,9 +115,9 @@ activar_servicio() {
     fi
 }
 
-PS3=" PS3 Este es el prompt automático del menú de opciones "
+PS3=" PS3 Este es el prompt automático del menu de opciones "
 
-opciones=("Listar procesos por usuario" "Matar proceso por numero" "Listar servicios que no estan corriendo" "Activar servicio por numero" "Salir")  # vector con lista de opciones a mostrar
+opciones=("Listar procesos por usuario" "Matar proceso por numero" "Listar servicios que no estan corriendo" "Activar servicio por numero" "Salir")
 
 select opc in "${opciones[@]}"
 do
@@ -128,7 +125,7 @@ do
     "Listar procesos por usuario")
        listar_procesos
 
-       ;;  # Fin opción 1
+       ;; 
      "Matar proceso por numero")
        matar_proceso
 
@@ -148,5 +145,5 @@ do
       *)
 	      echo "opcionalmente podemos usar esto usa una opción incorrecta (else) "
 	;;
-     esac 	#  fin al case (case al réves)
+     esac
 done
