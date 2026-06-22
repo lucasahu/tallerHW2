@@ -7,27 +7,34 @@ listar_procesos() {
     read -p "Ingrese nombre de usuario (o * para todos): " usuario
 
     if [ "$usuario" = "*" ]; then
-        salida=$(ps -e -o pid=,user=,comm=)
+        ps -e -o pid,user,comm > procesos.txt
     else
         if ! id "$usuario" >/dev/null 2>&1; then
             echo "El usuario '$usuario' no existe."
             return 1
         fi
-        salida=$(ps -u "$usuario" -o pid=,user=,comm=)
+        ps -u "$usuario" -o pid,user,comm > procesos.txt
     fi
 
     PIDS=()
-    listado=""
     contador=1
+    primera=1
+    > listado.txt
 
     while read -r pid user comm; do
+        # La primera linea es la cabecera (PID USER COMMAND), la saltamos
+        if [ $primera -eq 1 ]; then
+            primera=0
+            continue
+        fi
         PIDS[contador]=$pid
-        listado+="$contador) PID=$pid USER=$user CMD=$comm"$'\n'
+        echo "$contador) PID=$pid USER=$user CMD=$comm" >> listado.txt
         contador=$((contador+1))
-    done <<< "$salida"
+    done < procesos.txt
 
-    # Paginar el listado ya construido
-    echo "$listado" | less
+    # Mostramos el listado pagina a pagina
+    less listado.txt
+    rm -f procesos.txt listado.txt
 }
 
 matar_proceso() {
