@@ -1,4 +1,4 @@
-#/bin/bash
+#!/bin/bash
 
 PIDS=()
 SERVICIOS=()
@@ -6,24 +6,20 @@ SERVICIOS=()
 listar_procesos() {
     read -p "Ingrese nombre de usuario (o * para todos): " usuario
 
-    # Elegir el comando ps según la entrada
     if [ "$usuario" = "*" ]; then
         salida=$(ps -e -o pid=,user=,comm=)
     else
-        # Validar que el usuario exista antes de listar
-        if ! id "$usuario" &>/dev/null; then
+        if ! id "$usuario" >/dev/null 2>&1; then
             echo "El usuario '$usuario' no existe."
             return 1
         fi
         salida=$(ps -u "$usuario" -o pid=,user=,comm=)
     fi
 
-    # Reiniciar el mapeo (un listado nuevo invalida el anterior)
     PIDS=()
-    local listado=""
-    local contador=1
+    listado=""
+    contador=1
 
-    # Leer línea por línea SIN pipe para no perder PIDS en un subshell
     while read -r pid user comm; do
         PIDS[contador]=$pid
         listado+="$contador) PID=$pid USER=$user CMD=$comm"$'\n'
@@ -35,7 +31,6 @@ listar_procesos() {
 }
 
 matar_proceso() {
-    # Sin listado previo no hay mapeo secuencial→PID
     if [ ${#PIDS[@]} -eq 0 ]; then
         echo "Primero debe listar procesos (opción 1)."
         return 1
@@ -43,8 +38,14 @@ matar_proceso() {
 
     read -p "Ingrese el número secuencial del proceso a matar: " num
 
-    # Validar que sea un número y que exista en el mapeo
-    if ! [[ "$num" =~ ^[0-9]+$ ]] || [ -z "${PIDS[$num]}" ]; then
+    case "$num" in
+        *[!0-9]*|"")
+            echo "Número inválido."
+            return 1
+            ;;
+    esac
+
+    if [ -z "${PIDS[$num]}" ]; then
         echo "Número inválido."
         return 1
     fi
@@ -58,12 +59,12 @@ matar_proceso() {
 }
 
 listar_servicios() {
-    if ! command -v systemctl &>/dev/null; then
+    if ! which systemctl >/dev/null 2>&1; then
         echo "Este sistema no tiene systemctl."
         return 1
     fi
 
-    salida=$(systemctl list-units --all --type=service --state=inactive --no-legend --no-pager)
+    salida=$(systemctl list-units --all --type=service --state=inactive,failed --no-legend --no-pager)
 
     if [ -z "$salida" ]; then
         echo "No hay servicios detenidos para mostrar."
@@ -91,7 +92,14 @@ activar_servicio() {
 
     read -p "Ingrese el numero secuencial del servicio a activar: " num
 
-    if ! [[ "$num" =~ ^[0-9]+$ ]] || [ -z "${SERVICIOS[$num]}" ]; then
+    case "$num" in
+        *[!0-9]*|"")
+            echo "Numero invalido."
+            return 1
+            ;;
+    esac
+
+    if [ -z "${SERVICIOS[$num]}" ]; then
         echo "Numero invalido."
         return 1
     fi
